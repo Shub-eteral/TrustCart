@@ -1,5 +1,6 @@
 package com.trustcart.backend.service;
 
+import com.trustcart.backend.model.Block;
 import com.trustcart.backend.model.CartItem;
 import com.trustcart.backend.model.Order;
 import com.trustcart.backend.model.OrderItem;
@@ -102,7 +103,7 @@ public class OrderService {
         /*
          * Add order information to blockchain.
          */
-        var block = blockchain.addBlock(blockchainData);
+        Block block = blockchain.addBlock(blockchainData);
 
         /*
          * Store blockchain hash inside the order.
@@ -173,30 +174,65 @@ public class OrderService {
 
         String storedHash = order.getBlockchainHash();
 
-        // Order does not have a blockchain record
         if (storedHash == null || storedHash.isBlank()) {
             return false;
         }
 
         /*
-         * Recreate the exact data that was originally
-         * stored on the blockchain.
+         * Find the blockchain block using the hash
+         * stored inside the order.
          */
-        String blockchainData =
-                "ORDER_ID=" + order.getId()
-                        + "|USER=" + order.getUser().getEmail()
-                        + "|TOTAL=" + order.getTotalAmount()
-                        + "|DATE=" + order.getOrderDate();
+        for (Block block : blockchain.getChain()) {
+
+            if (storedHash.equals(block.getHash())) {
+
+                /*
+                 * Recalculate the hash using the exact
+                 * block data that was originally used.
+                 */
+                String recalculatedHash =
+                        blockchainService.generateHash(
+                                block.getIndex()
+                                        + block.getPreviousHash()
+                                        + block.getData()
+                        );
+
+                // Verify current block hash
+                if (!block.getHash()
+                        .equals(recalculatedHash)) {
+
+                    return false;
+                }
+
+                /*
+                 * Verify connection with the previous block.
+                 */
+                if (block.getIndex() > 0) {
+
+                    List<Block> chain =
+                            blockchain.getChain();
+
+                    if (block.getIndex() >= chain.size()) {
+                        return false;
+                    }
+
+                    Block previousBlock =
+                            chain.get(block.getIndex() - 1);
+
+                    if (!block.getPreviousHash()
+                            .equals(previousBlock.getHash())) {
+
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
 
         /*
-         * Generate the hash again.
+         * No blockchain block was found for this order.
          */
-        String recalculatedHash =
-                blockchainService.generateHash(blockchainData);
-
-        /*
-         * Compare stored hash with recalculated hash.
-         */
-        return storedHash.equals(recalculatedHash);
+        return false;
     }
 }
