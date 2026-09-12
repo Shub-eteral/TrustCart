@@ -1,1171 +1,534 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import "./App.css";
+
+import Navbar from "./components/Navbar";
+import Hero from "./components/Hero";
+import ProductGrid from "./components/ProductGrid";
+import OrdersPage from "./components/OrdersPage";
+import CartModal from "./components/CartModal";
+import AuthModal from "./components/AuthModal";
+import Features from "./components/Features";
+import Footer from "./components/Footer";
+import Toast from "./components/Toast";
 
 const API_URL = "http://localhost:8080";
 
-function App() {
+export default function App() {
+  // Navigation & Page State
+  const [activeTab, setActiveTab] = useState("home"); // "home" | "orders"
+
+  // Core Data
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("All");
   const [search, setSearch] = useState("");
-  const [cartCount, setCartCount] = useState(0);
-  const [loading, setLoading] = useState(true);
 
+  // Modals
   const [showAccount, setShowAccount] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
 
+  // Authentication Fields
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [userEmail, setUserEmail] = useState(
+    localStorage.getItem("userEmail") || ""
+  );
+  const [userRole, setUserRole] = useState(
+    localStorage.getItem("userRole") || ""
+  );
 
+  // Loading States
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [verifyingOrder, setVerifyingOrder] = useState({});
+  const [verificationResult, setVerificationResult] = useState({});
+  const [lastPlacedOrder, setLastPlacedOrder] = useState(null);
+
+  // Toast Notifications
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = (message, type = "success") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
 
   const token = localStorage.getItem("token");
 
+  // Initial Load
   useEffect(() => {
     fetchProducts();
-
     if (token) {
       fetchCart();
     }
-  }, []);
+  }, [token]);
+
+  // Load Orders on tab switch
+  useEffect(() => {
+    if (activeTab === "orders" && token) {
+      fetchOrders();
+    }
+  }, [activeTab, token]);
 
   // =========================
-  // PRODUCTS
+  // PRODUCTS LOGIC
   // =========================
-
   const fetchProducts = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/products`);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch products");
-      }
-
-      const data = await response.json();
+      setProductsLoading(true);
+      const res = await fetch(`${API_URL}/api/products`);
+      if (!res.ok) throw new Error("Failed to load products");
+      const data = await res.json();
       setProducts(data);
-    } catch (error) {
-      console.error("Error loading products:", error);
+    } catch (err) {
+      console.error(err);
+      showToast("Unable to reach backend products API", "error");
     } finally {
-      setLoading(false);
+      setProductsLoading(false);
     }
   };
 
-  // =========================
-  // CART
-  // =========================
+  // Extract dynamic categories from products
+  const categories = useMemo(() => {
+    const set = new Set(["All"]);
+    products.forEach((p) => {
+      if (p.category) set.add(p.category);
+    });
+    return Array.from(set);
+  }, [products]);
 
+  // Filter products by search and category
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const matchesSearch =
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.description &&
+          p.description.toLowerCase().includes(search.toLowerCase()));
+      const matchesCategory =
+        selectedCategory === "All" || p.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, search, selectedCategory]);
+
+  // =========================
+  // CART LOGIC
+  // =========================
   const fetchCart = async () => {
     const currentToken = localStorage.getItem("token");
-
-    if (!currentToken) {
-      return;
-    }
+    if (!currentToken) return;
 
     try {
-      const response = await fetch(`${API_URL}/api/cart`, {
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-        },
+      const res = await fetch(`${API_URL}/api/cart`, {
+        headers: { Authorization: `Bearer ${currentToken}` },
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch cart");
-      }
-
-      const data = await response.json();
-
+      if (!res.ok) throw new Error("Failed to load cart");
+      const data = await res.json();
       setCart(data);
-
-      const totalQuantity = data.reduce(
-        (total, item) => total + item.quantity,
-        0
-      );
-
-      setCartCount(totalQuantity);
-    } catch (error) {
-      console.error("Error loading cart:", error);
+    } catch (err) {
+      console.error("Cart fetch error:", err);
     }
   };
+
+  const cartCount = useMemo(() => {
+    return cart.reduce((acc, item) => acc + item.quantity, 0);
+  }, [cart]);
+
+  const cartTotal = useMemo(() => {
+    return cart.reduce(
+      (acc, item) => acc + (item.product?.price || 0) * item.quantity,
+      0
+    );
+  }, [cart]);
 
   const addToCart = async (productId) => {
     const currentToken = localStorage.getItem("token");
-
     if (!currentToken) {
-      alert("Please login first.");
+      showToast("Please sign in to add products to your cart", "error");
       setShowAccount(true);
       return;
     }
 
     try {
-      const response = await fetch(
+      const res = await fetch(
         `${API_URL}/api/cart/add?productId=${productId}&quantity=1`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-          },
+          headers: { Authorization: `Bearer ${currentToken}` },
         }
       );
-
-      if (!response.ok) {
-        throw new Error("Could not add product");
+      if (!res.ok) {
+        const errorMsg = await res.text();
+        throw new Error(errorMsg || "Failed to add product");
       }
-
       await fetchCart();
-
-      alert("Product added to cart!");
-    } catch (error) {
-      console.error(error);
-      alert("Failed to add product to cart.");
+      showToast("Product added to cryptographically secured cart!");
+    } catch (err) {
+      showToast(err.message || "Failed to add to cart", "error");
     }
   };
 
-  const updateCartQuantity = async (cartItemId, quantity) => {
+  const updateCartQuantity = async (cartItemId, newQty) => {
     const currentToken = localStorage.getItem("token");
-
-    if (!currentToken) {
-      return;
-    }
-
-    if (quantity < 1) {
-      return;
-    }
+    if (!currentToken || newQty < 1) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/cart/${cartItemId}?quantity=${quantity}`,
+      const res = await fetch(
+        `${API_URL}/api/cart/${cartItemId}?quantity=${newQty}`,
         {
           method: "PUT",
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-          },
+          headers: { Authorization: `Bearer ${currentToken}` },
         }
       );
-
-      if (!response.ok) {
-        throw new Error("Could not update cart");
-      }
-
+      if (!res.ok) throw new Error("Could not update quantity");
       await fetchCart();
-    } catch (error) {
-      console.error(error);
-      alert("Failed to update quantity.");
+    } catch (err) {
+      showToast("Failed to update cart quantity", "error");
     }
   };
 
   const removeFromCart = async (cartItemId) => {
     const currentToken = localStorage.getItem("token");
-
-    if (!currentToken) {
-      return;
-    }
+    if (!currentToken) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/cart/${cartItemId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Could not remove item");
-      }
-
+      const res = await fetch(`${API_URL}/api/cart/${cartItemId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${currentToken}` },
+      });
+      if (!res.ok) throw new Error("Could not remove item");
       await fetchCart();
-    } catch (error) {
-      console.error(error);
-      alert("Failed to remove item.");
+      showToast("Item removed from cart");
+    } catch (err) {
+      showToast("Failed to remove item", "error");
     }
   };
 
   const clearCart = async () => {
     const currentToken = localStorage.getItem("token");
-
-    if (!currentToken) {
-      return;
-    }
+    if (!currentToken) return;
 
     try {
-      const response = await fetch(`${API_URL}/api/cart/clear`, {
+      const res = await fetch(`${API_URL}/api/cart/clear`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-        },
+        headers: { Authorization: `Bearer ${currentToken}` },
       });
-
-      if (!response.ok) {
-        throw new Error("Could not clear cart");
-      }
-
+      if (!res.ok) throw new Error("Failed to clear cart");
       await fetchCart();
-    } catch (error) {
-      console.error(error);
-      alert("Failed to clear cart.");
+      showToast("Cart emptied");
+    } catch (err) {
+      showToast("Failed to clear cart", "error");
     }
   };
 
   // =========================
-  // CHECKOUT
+  // CHECKOUT LOGIC
   // =========================
-
   const checkout = async () => {
     const currentToken = localStorage.getItem("token");
-
     if (!currentToken) {
-      alert("Please login first.");
+      showToast("Please authenticate first", "error");
       setShowCart(false);
       setShowAccount(true);
       return;
     }
-
     if (cart.length === 0) {
-      alert("Your cart is empty.");
+      showToast("Your cart is empty", "error");
       return;
     }
 
     setCheckoutLoading(true);
-
     try {
-      const response = await fetch(`${API_URL}/api/orders`, {
+      const res = await fetch(`${API_URL}/api/orders`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-        },
+        headers: { Authorization: `Bearer ${currentToken}` },
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Checkout failed.");
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || "Checkout failed");
       }
 
-      const order = await response.json();
-
+      const order = await res.json();
+      setLastPlacedOrder(order);
       await fetchCart();
       await fetchProducts();
-
-      setShowCart(false);
-
-      alert(
-        `Order placed successfully!\n\nOrder ID: ${order.id}\nTotal: ₹${order.totalAmount.toLocaleString(
-          "en-IN"
-        )}\n\nBlockchain Hash:\n${order.blockchainHash}`
-      );
-    } catch (error) {
-      console.error("Checkout error:", error);
-      alert(error.message || "Checkout failed.");
+      showToast("Order mined onto blockchain successfully!", "success");
+    } catch (err) {
+      console.error("Checkout error:", err);
+      showToast(err.message || "Checkout failed", "error");
     } finally {
       setCheckoutLoading(false);
     }
   };
 
   // =========================
-  // LOGIN
+  // ORDERS & BLOCKCHAIN VERIFY
   // =========================
+  const fetchOrders = async () => {
+    const currentToken = localStorage.getItem("token");
+    if (!currentToken) return;
 
-  const handleAccountClick = () => {
-    setShowAccount(true);
+    setOrdersLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders`, {
+        headers: { Authorization: `Bearer ${currentToken}` },
+      });
+      if (!res.ok) throw new Error("Failed to load orders");
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data.reverse() : []);
+    } catch (err) {
+      console.error(err);
+      showToast("Error loading orders", "error");
+    } finally {
+      setOrdersLoading(false);
+    }
   };
 
+  const verifyOrderBlockchain = async (orderId) => {
+    const currentToken = localStorage.getItem("token");
+    if (!currentToken) return;
+
+    setVerifyingOrder((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/verify`, {
+        headers: { Authorization: `Bearer ${currentToken}` },
+      });
+      const message = await res.text();
+      const isValid = res.ok && message.toLowerCase().includes("authentic");
+
+      setVerificationResult((prev) => ({
+        ...prev,
+        [orderId]: {
+          isValid,
+          message,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+      }));
+
+      if (isValid) {
+        showToast(
+          `Order #${orderId} verified on cryptographic ledger!`,
+          "success"
+        );
+      } else {
+        showToast(`Warning: Order #${orderId} failed verification`, "error");
+      }
+    } catch (err) {
+      setVerificationResult((prev) => ({
+        ...prev,
+        [orderId]: {
+          isValid: false,
+          message: "Verification network error",
+        },
+      }));
+      showToast("Blockchain verification error", "error");
+    } finally {
+      setVerifyingOrder((prev) => ({ ...prev, [orderId]: false }));
+    }
+  };
+
+  // =========================
+  // AUTHENTICATION LOGIC
+  // =========================
   const handleLogin = async (e) => {
     e.preventDefault();
-
     if (!email || !password) {
-      alert("Please enter email and password.");
+      showToast("Please provide both email and password", "error");
       return;
     }
 
     setLoginLoading(true);
-
     try {
-      const response = await fetch(`${API_URL}/api/users/login`, {
+      const res = await fetch(`${API_URL}/api/users/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (!response.ok) {
-        throw new Error("Invalid email or password.");
-      }
-
-      const data = await response.json();
+      if (!res.ok) throw new Error("Invalid email or password");
+      const data = await res.json();
 
       if (data.token) {
         localStorage.setItem("token", data.token);
-      } else if (typeof data === "string") {
-        localStorage.setItem("token", data);
+        localStorage.setItem("userEmail", data.email || email);
+        localStorage.setItem("userRole", data.role || "CUSTOMER");
+        setUserEmail(data.email || email);
+        setUserRole(data.role || "CUSTOMER");
       } else {
-        throw new Error(
-          "Login successful but no token was returned."
-        );
+        throw new Error("No token returned from server");
       }
 
-      alert("Login successful!");
-
+      showToast("Authenticated successfully!");
       setShowAccount(false);
-
       setEmail("");
       setPassword("");
-
-      window.location.reload();
-    } catch (error) {
-      console.error("Login error:", error);
-      alert(error.message || "Login failed.");
+      fetchCart();
+    } catch (err) {
+      showToast(err.message || "Login failed", "error");
     } finally {
       setLoginLoading(false);
     }
   };
 
-  // =========================
-  // REGISTER
-  // =========================
-
   const handleRegister = async (e) => {
     e.preventDefault();
-
     if (!name || !email || !password) {
-      alert("Please fill all fields.");
+      showToast("Please fill all fields", "error");
       return;
     }
 
     setLoginLoading(true);
-
     try {
-      const response = await fetch(`${API_URL}/api/users/register`, {
+      const res = await fetch(`${API_URL}/api/users/register`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          role: "USER",
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, role: "CUSTOMER" }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Registration failed.");
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || "Registration failed");
       }
 
-      alert("Registration successful! Please login.");
-
+      showToast("Account created! Please login now.");
       setIsRegister(false);
       setName("");
-      setEmail("");
       setPassword("");
-    } catch (error) {
-      console.error("Registration error:", error);
-      alert(error.message || "Registration failed.");
+    } catch (err) {
+      showToast(err.message || "Registration failed", "error");
     } finally {
       setLoginLoading(false);
     }
   };
 
-  // =========================
-  // LOGOUT
-  // =========================
-
-  const logout = () => {
+  const handleLogout = () => {
     localStorage.removeItem("token");
-
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userRole");
+    setUserEmail("");
+    setUserRole("");
     setCart([]);
-    setCartCount(0);
+    setOrders([]);
     setShowAccount(false);
-
-    window.location.reload();
+    showToast("Signed out safely");
   };
 
-  // =========================
-  // FILTER
-  // =========================
-
-  const filteredProducts = products.filter((product) =>
-    product.name
-      .toLowerCase()
-      .includes(search.toLowerCase())
-  );
-
-  // =========================
-  // CART TOTAL
-  // =========================
-
-  const cartTotal = cart.reduce(
-    (total, item) =>
-      total +
-      item.product.price * item.quantity,
-    0
-  );
+  const copyToClipboard = (text, label) => {
+    navigator.clipboard.writeText(text);
+    showToast(`${label} copied to clipboard!`);
+  };
 
   return (
     <div className="app">
+      {/* Toast Notifications */}
+      <Toast toasts={toasts} />
 
-      {/* ================= NAVBAR ================= */}
+      {/* Navigation Bar */}
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        search={search}
+        setSearch={setSearch}
+        cartCount={cartCount}
+        userEmail={userEmail}
+        token={token}
+        onOpenAccount={() => setShowAccount(true)}
+        onOpenCart={() => {
+          setLastPlacedOrder(null);
+          setShowCart(true);
+        }}
+        showToast={showToast}
+      />
 
-      <header className="navbar">
-
-        <div className="logo">
-          Trust<span>Cart</span>
-        </div>
-
-        <div className="search-box">
-
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={search}
-            onChange={(e) =>
-              setSearch(e.target.value)
-            }
+      {/* Main Pages */}
+      {activeTab === "home" ? (
+        <>
+          <Hero
+            token={token}
+            onOpenAccount={() => setShowAccount(true)}
+            setActiveTab={setActiveTab}
+            lastPlacedOrder={lastPlacedOrder}
           />
 
-          <button>
-            🔍
-          </button>
-
-        </div>
-
-        <div className="nav-actions">
-
-          <button
-            className="nav-link"
-            onClick={handleAccountClick}
-          >
-            👤 Account
-          </button>
-
-          <button
-            className="nav-link"
-            onClick={() =>
-              alert("Orders page coming next.")
-            }
-          >
-            📦 Orders
-          </button>
-
-          <button
-            className="cart-button"
-            onClick={() => {
-              if (!token) {
-                alert("Please login first.");
-                setShowAccount(true);
-                return;
-              }
-
-              fetchCart();
-              setShowCart(true);
+          <ProductGrid
+            products={filteredProducts}
+            loading={productsLoading}
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            search={search}
+            onResetFilters={() => {
+              setSearch("");
+              setSelectedCategory("All");
             }}
-          >
-            🛒 Cart
-
-            <span className="cart-count">
-              {cartCount}
-            </span>
-
-          </button>
-
-        </div>
-
-      </header>
-
-
-      {/* ================= CATEGORY BAR ================= */}
-
-      <nav className="category-bar">
-
-        <span>☰ All</span>
-        <span>Electronics</span>
-        <span>Mobiles</span>
-        <span>Fashion</span>
-        <span>Home</span>
-        <span>Beauty</span>
-        <span>Groceries</span>
-        <span>Today's Deals</span>
-
-      </nav>
-
-
-      {/* ================= HERO ================= */}
-
-      <section className="hero">
-
-        <div className="hero-content">
-
-          <p className="hero-small">
-            WELCOME TO
-          </p>
-
-          <h1>
-            Shop smarter with
-            <br />
-            <span>TrustCart</span>
-          </h1>
-
-          <p className="hero-description">
-            Discover great products with secure shopping,
-            transparent orders and blockchain verification.
-          </p>
-
-          <button
-            className="shop-button"
-            onClick={() => {
-              document
-                .querySelector(".products-section")
-                ?.scrollIntoView({
-                  behavior: "smooth",
-                });
-            }}
-          >
-            Shop Now →
-          </button>
-
-        </div>
-
-
-        <div className="hero-card">
-
-          <div className="hero-icon">
-            🛍️
-          </div>
-
-          <h2>
-            Secure Shopping
-          </h2>
-
-          <p>
-            Every order can be verified on our blockchain.
-          </p>
-
-        </div>
-
-      </section>
-
-
-      {/* ================= PRODUCTS ================= */}
-
-      <main className="products-section">
-
-        <div className="section-heading">
-
-          <div>
-
-            <p className="section-label">
-              EXPLORE
-            </p>
-
-            <h2>
-              Popular Products
-            </h2>
-
-          </div>
-
-          <button
-            className="view-all"
-            onClick={() => setSearch("")}
-          >
-            View All →
-          </button>
-
-        </div>
-
-
-        {loading ? (
-
-          <div className="loading">
-            Loading products...
-          </div>
-
-        ) : filteredProducts.length === 0 ? (
-
-          <div className="empty">
-            No products found.
-          </div>
-
-        ) : (
-
-          <div className="product-grid">
-
-            {filteredProducts.map((product) => (
-
-              <div
-                className="product-card"
-                key={product.id}
-              >
-
-                <div className="product-image">
-                  📱
-                </div>
-
-                <div className="product-info">
-
-                  <span className="category">
-                    {product.category}
-                  </span>
-
-                  <h3>
-                    {product.name}
-                  </h3>
-
-                  <p className="description">
-                    {product.description}
-                  </p>
-
-                  <div className="rating">
-                    ⭐⭐⭐⭐⭐
-                  </div>
-
-                  <div className="product-bottom">
-
-                    <div>
-
-                      <p className="price">
-                        ₹
-                        {product.price.toLocaleString(
-                          "en-IN"
-                        )}
-                      </p>
-
-                      <p className="stock">
-
-                        {product.stock > 0
-                          ? `${product.stock} in stock`
-                          : "Out of stock"}
-
-                      </p>
-
-                    </div>
-
-                    <button
-                      className="add-button"
-                      disabled={
-                        product.stock <= 0
-                      }
-                      onClick={() =>
-                        addToCart(product.id)
-                      }
-                    >
-                      +
-                    </button>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            ))}
-
-          </div>
-
-        )}
-
-      </main>
-
-
-      {/* ================= FEATURES ================= */}
-
-      <section className="features">
-
-        <div className="feature">
-
-          <div>🚚</div>
-
-          <h3>
-            Fast Delivery
-          </h3>
-
-          <p>
-            Quick and reliable delivery.
-          </p>
-
-        </div>
-
-
-        <div className="feature">
-
-          <div>🔒</div>
-
-          <h3>
-            Secure Payments
-          </h3>
-
-          <p>
-            Your shopping data stays protected.
-          </p>
-
-        </div>
-
-
-        <div className="feature">
-
-          <div>⛓️</div>
-
-          <h3>
-            Blockchain Verified
-          </h3>
-
-          <p>
-            Verify the authenticity of your orders.
-          </p>
-
-        </div>
-
-
-        <div className="feature">
-
-          <div>💬</div>
-
-          <h3>
-            Customer Support
-          </h3>
-
-          <p>
-            We're here whenever you need help.
-          </p>
-
-        </div>
-
-      </section>
-
-
-      {/* ================= FOOTER ================= */}
-
-      <footer>
-
-        <div className="footer-logo">
-          Trust<span>Cart</span>
-        </div>
-
-        <p>
-          Secure shopping. Transparent orders. Trusted commerce.
-        </p>
-
-        <p className="copyright">
-          © 2026 TrustCart
-        </p>
-
-      </footer>
-
-
-      {/* ================= ACCOUNT MODAL ================= */}
-
-      {showAccount && (
-
-        <div
-          className="account-overlay"
-          onClick={(e) => {
-            if (
-              e.target === e.currentTarget
-            ) {
-              setShowAccount(false);
-            }
-          }}
-        >
-
-          <div className="account-modal">
-
-            <button
-              className="close-button"
-              onClick={() =>
-                setShowAccount(false)
-              }
-            >
-              ✕
-            </button>
-
-
-            {token ? (
-
-              <>
-                <div className="account-icon">
-                  👤
-                </div>
-
-                <h2>
-                  Welcome Back
-                </h2>
-
-                <p>
-                  You are currently logged in.
-                </p>
-
-                <button
-                  className="account-action"
-                  onClick={logout}
-                >
-                  Logout
-                </button>
-              </>
-
-            ) : (
-
-              <>
-
-                <div className="account-icon">
-                  {isRegister
-                    ? "📝"
-                    : "🔐"}
-                </div>
-
-                <h2>
-                  {isRegister
-                    ? "Create Account"
-                    : "Welcome Back"}
-                </h2>
-
-                <p>
-                  {isRegister
-                    ? "Create your TrustCart account."
-                    : "Login to continue shopping."}
-                </p>
-
-
-                {isRegister ? (
-
-                  <form
-                    onSubmit={handleRegister}
-                  >
-
-                    <input
-                      className="account-input"
-                      type="text"
-                      placeholder="Full Name"
-                      value={name}
-                      onChange={(e) =>
-                        setName(e.target.value)
-                      }
-                    />
-
-                    <input
-                      className="account-input"
-                      type="email"
-                      placeholder="Email"
-                      value={email}
-                      onChange={(e) =>
-                        setEmail(e.target.value)
-                      }
-                    />
-
-                    <input
-                      className="account-input"
-                      type="password"
-                      placeholder="Password"
-                      value={password}
-                      onChange={(e) =>
-                        setPassword(e.target.value)
-                      }
-                    />
-
-                    <button
-                      className="account-action"
-                      type="submit"
-                      disabled={loginLoading}
-                    >
-                      {loginLoading
-                        ? "Creating Account..."
-                        : "Create Account"}
-                    </button>
-
-                  </form>
-
-                ) : (
-
-                  <form
-                    onSubmit={handleLogin}
-                  >
-
-                    <input
-                      className="account-input"
-                      type="email"
-                      placeholder="Email"
-                      value={email}
-                      onChange={(e) =>
-                        setEmail(e.target.value)
-                      }
-                    />
-
-                    <input
-                      className="account-input"
-                      type="password"
-                      placeholder="Password"
-                      value={password}
-                      onChange={(e) =>
-                        setPassword(e.target.value)
-                      }
-                    />
-
-                    <button
-                      className="account-action"
-                      type="submit"
-                      disabled={loginLoading}
-                    >
-                      {loginLoading
-                        ? "Logging in..."
-                        : "Login"}
-                    </button>
-
-                  </form>
-
-                )}
-
-
-                <button
-                  className="switch-account"
-                  onClick={() => {
-                    setIsRegister(!isRegister);
-                    setName("");
-                    setEmail("");
-                    setPassword("");
-                  }}
-                >
-                  {isRegister
-                    ? "Already have an account? Login"
-                    : "Don't have an account? Register"}
-                </button>
-
-              </>
-
-            )}
-
-          </div>
-
-        </div>
-
+            onAddToCart={addToCart}
+          />
+
+          <Features />
+        </>
+      ) : (
+        <OrdersPage
+          orders={orders}
+          loading={ordersLoading}
+          userEmail={userEmail}
+          verifyingOrder={verifyingOrder}
+          verificationResult={verificationResult}
+          onVerifyOrder={verifyOrderBlockchain}
+          onCopyToClipboard={copyToClipboard}
+          onNavigateHome={() => setActiveTab("home")}
+        />
       )}
 
+      {/* Footer */}
+      <Footer />
 
-      {/* ================= CART MODAL ================= */}
+      {/* Slide-over Cart Drawer */}
+      <CartModal
+        isOpen={showCart}
+        onClose={() => setShowCart(false)}
+        cart={cart}
+        cartCount={cartCount}
+        cartTotal={cartTotal}
+        checkoutLoading={checkoutLoading}
+        lastPlacedOrder={lastPlacedOrder}
+        onUpdateQuantity={updateCartQuantity}
+        onRemoveItem={removeFromCart}
+        onClearCart={clearCart}
+        onCheckout={checkout}
+        onViewOrders={() => {
+          setShowCart(false);
+          setActiveTab("orders");
+        }}
+      />
 
-      {showCart && (
-
-        <div
-          className="cart-overlay"
-          onClick={(e) => {
-            if (
-              e.target === e.currentTarget
-            ) {
-              setShowCart(false);
-            }
-          }}
-        >
-
-          <div className="cart-modal">
-
-            <div className="cart-header">
-
-              <h2>
-                🛒 Your Cart
-              </h2>
-
-              <button
-                className="close-button"
-                onClick={() =>
-                  setShowCart(false)
-                }
-              >
-                ✕
-              </button>
-
-            </div>
-
-
-            {cart.length === 0 ? (
-
-              <div className="empty-cart">
-
-                <div className="empty-cart-icon">
-                  🛒
-                </div>
-
-                <h3>
-                  Your cart is empty
-                </h3>
-
-                <p>
-                  Add some products to get started.
-                </p>
-
-                <button
-                  className="account-action"
-                  onClick={() =>
-                    setShowCart(false)
-                  }
-                >
-                  Continue Shopping
-                </button>
-
-              </div>
-
-            ) : (
-
-              <>
-
-                <div className="cart-items">
-
-                  {cart.map((item) => (
-
-                    <div
-                      className="cart-item"
-                      key={item.id}
-                    >
-
-                      <div className="cart-item-image">
-                        📱
-                      </div>
-
-
-                      <div className="cart-item-info">
-
-                        <h3>
-                          {item.product.name}
-                        </h3>
-
-                        <p>
-                          ₹
-                          {item.product.price.toLocaleString(
-                            "en-IN"
-                          )}
-                        </p>
-
-
-                        <div className="quantity-controls">
-
-                          <button
-                            onClick={() =>
-                              updateCartQuantity(
-                                item.id,
-                                item.quantity - 1
-                              )
-                            }
-                            disabled={
-                              item.quantity <= 1
-                            }
-                          >
-                            −
-                          </button>
-
-                          <span>
-                            {item.quantity}
-                          </span>
-
-                          <button
-                            onClick={() =>
-                              updateCartQuantity(
-                                item.id,
-                                item.quantity + 1
-                              )
-                            }
-                          >
-                            +
-                          </button>
-
-                        </div>
-
-                      </div>
-
-
-                      <div className="cart-item-right">
-
-                        <strong>
-                          ₹
-                          {(
-                            item.product.price *
-                            item.quantity
-                          ).toLocaleString("en-IN")}
-                        </strong>
-
-                        <button
-                          className="remove-button"
-                          onClick={() =>
-                            removeFromCart(item.id)
-                          }
-                        >
-                          Remove
-                        </button>
-
-                      </div>
-
-                    </div>
-
-                  ))}
-
-                </div>
-
-
-                <div className="cart-summary">
-
-                  <div className="summary-row">
-
-                    <span>
-                      Items
-                    </span>
-
-                    <span>
-                      {cartCount}
-                    </span>
-
-                  </div>
-
-
-                  <div className="summary-row total-row">
-
-                    <span>
-                      Total
-                    </span>
-
-                    <strong>
-                      ₹
-                      {cartTotal.toLocaleString(
-                        "en-IN"
-                      )}
-                    </strong>
-
-                  </div>
-
-
-                  <button
-                    className="checkout-button"
-                    onClick={checkout}
-                    disabled={checkoutLoading}
-                  >
-                    {checkoutLoading
-                      ? "Placing Order..."
-                      : "Proceed to Checkout →"}
-                  </button>
-
-
-                  <button
-                    className="clear-cart-button"
-                    onClick={clearCart}
-                  >
-                    Clear Cart
-                  </button>
-
-                </div>
-
-              </>
-
-            )}
-
-          </div>
-
-        </div>
-
-      )}
-
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAccount}
+        onClose={() => setShowAccount(false)}
+        token={token}
+        userEmail={userEmail}
+        userRole={userRole}
+        isRegister={isRegister}
+        setIsRegister={setIsRegister}
+        name={name}
+        setName={setName}
+        email={email}
+        setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+        loginLoading={loginLoading}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onLogout={handleLogout}
+        onViewOrders={() => setActiveTab("orders")}
+      />
     </div>
   );
 }
-
-export default App;
