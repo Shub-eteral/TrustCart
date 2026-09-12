@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --ink: #07100f;
+  --ink-2: #0c1816;
+  --ink-3: #11221f;
+  --ink-4: #18322e;
+  --surface: rgba(15, 30, 27, 0.76);
+  --surface-strong: rgba(20, 39, 35, 0.94);
+  --paper: #f7f0df;
+  --paper-soft: #d8ccb2;
+  --muted: #96aca4;
+  --faint: #5f7770;
+  --line: rgba(225, 213, 180, 0.12);
+  --line-strong: rgba(225, 213, 180, 0.22);
+  --teal: #31d6bc;
+  --teal-deep: #16a88f;
+  --gold: #f3c766;
+  --rose: #ff6f91;
+  --green: #39dc97;
+  --red: #ff5d5d;
+  --blue: #7eb6ff;
+  --blue-lt: #9fc8ff;
+  --amber: #f3c766;
+  --black: var(--ink);
+  --navy-0: var(--ink);
+  --navy-1: var(--ink-2);
+  --navy-2: var(--ink-3);
+  --navy-3: var(--ink-4);
+  --navy-4: #21453f;
+  --t1: var(--paper);
+  --t2: var(--muted);
+  --t3: var(--faint);
+  --t4: #38524b;
+  --b1: var(--line);
+  --b2: var(--line-strong);
+  --b3: rgba(49, 214, 188, 0.45);
+  --glow-blue: rgba(49, 214, 188, 0.16);
+  --glow-green: rgba(57, 220, 151, 0.13);
+  --glow-red: rgba(255, 93, 93, 0.14);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  --px: clamp(18px, 5vw, 86px);
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 30px;
+  --r-2xl: 44px;
+  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 18px 46px rgba(0, 0, 0, 0.34);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.48);
+  --shadow-card: 0 18px 48px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --shadow-glow: 0 0 60px rgba(49, 214, 188, 0.08);
+  --shadow-btn: 0 12px 30px rgba(49, 214, 188, 0.18);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-fast: 0.16s;
+  --t-norm: 0.28s;
+  --t-slow: 0.48s;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--ink);
+}
+
+body {
+  min-width: 320px;
+  font-family: var(--font);
+  background:
+    linear-gradient(180deg, rgba(49, 214, 188, 0.05), transparent 320px),
+    linear-gradient(135deg, #07100f 0%, #0b1614 45%, #0e1514 100%);
+  color: var(--t1);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input {
+  border: none;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  background: rgba(49, 214, 188, 0.28);
+  color: var(--paper);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ink-2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(49, 214, 188, 0.55), rgba(243, 199, 102, 0.38));
+  border-radius: 999px;
+  border: 2px solid var(--ink-2);
+}
