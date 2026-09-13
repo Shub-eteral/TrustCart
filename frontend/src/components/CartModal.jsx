@@ -1,4 +1,4 @@
-import { getCategoryIcon } from "./ProductCard";
+import { getProductImage } from "./ProductCard";
 
 export default function CartModal({
   isOpen,
@@ -21,21 +21,19 @@ export default function CartModal({
       <div className="overlay" onClick={onClose} />
       <div className="cart-drawer">
         <div className="drawer-head">
-          <h2>
-            <span>🛒</span> Cryptographic Cart ({cartCount})
-          </h2>
-          <button className="close-x" onClick={onClose}>
-            ✕
-          </button>
+            <h2>Transaction ledger ({cartCount})</h2>
+            <button className="close-x" onClick={onClose} aria-label="Close cart">
+              Close
+            </button>
         </div>
 
         {lastPlacedOrder ? (
           <div className="checkout-ok">
             <div className="check-circle">✓</div>
-            <h2>Order Mined Successfully!</h2>
+              <h2>Transaction recorded.</h2>
             <p>
-              Your transaction has been permanently written to the blockchain
-              ledger.
+                Your order has been accepted and its transaction hash is now
+                available in your ledger history.
             </p>
 
             <div className="hash-box">
@@ -44,7 +42,7 @@ export default function CartModal({
                 #{lastPlacedOrder.id} (₹
                 {Number(lastPlacedOrder.totalAmount || 0).toLocaleString("en-IN")})
               </div>
-              <div className="lbl">BLOCKCHAIN MERKLE/BLOCK HASH</div>
+                <div className="lbl">TRANSACTION HASH</div>
               <div className="val">{lastPlacedOrder.blockchainHash}</div>
             </div>
 
@@ -53,7 +51,7 @@ export default function CartModal({
               style={{ width: "100%", justifyContent: "center" }}
               onClick={onViewOrders}
             >
-              View in Ledger History →
+                View ledger history
             </button>
           </div>
         ) : cart.length === 0 ? (
@@ -66,7 +64,7 @@ export default function CartModal({
               style={{ marginTop: "12px" }}
               onClick={onClose}
             >
-              Continue Browsing
+                Continue browsing
             </button>
           </div>
         ) : (
@@ -75,7 +73,17 @@ export default function CartModal({
               {cart.map((item) => (
                 <div className="cart-row" key={item.id}>
                   <div className="cart-row-img">
-                    {getCategoryIcon(item.product?.category, item.product?.name)}
+                    {getProductImage(item.product) ? (
+                      <img
+                        src={getProductImage(item.product)}
+                        alt=""
+                        className="cart-product-image"
+                      />
+                    ) : (
+                      (item.product?.category || item.product?.name || "TC")
+                        .slice(0, 2)
+                        .toUpperCase()
+                    )}
                   </div>
 
                   <div className="cart-row-info">
@@ -128,13 +136,29 @@ export default function CartModal({
             </div>
 
             <div className="cart-foot">
+              <div className="transaction-ready">
+                <div className="transaction-ready-title">Transaction ready</div>
+                <div className="transaction-check">
+                  <span>READY</span>
+                  <strong>Product records present</strong>
+                </div>
+                <div className="transaction-check">
+                  <span>READY</span>
+                  <strong>Account authenticated</strong>
+                </div>
+                <div className="transaction-check">
+                  <span>READY</span>
+                  <strong>Order integrity will be recorded at checkout</strong>
+                </div>
+              </div>
+
               <div className="cart-sum-row">
                 <span>Items Subtotal</span>
                 <span>₹{cartTotal.toLocaleString("en-IN")}</span>
               </div>
               <div className="cart-sum-row">
                 <span>Cryptographic Verification</span>
-                <span style={{ color: "var(--green)" }}>FREE (ON-CHAIN)</span>
+                  <span style={{ color: "var(--green)" }}>Included</span>
               </div>
               <div className="cart-sum-total">
                 <span>Total</span>
@@ -147,12 +171,12 @@ export default function CartModal({
                 onClick={onCheckout}
               >
                 {checkoutLoading
-                  ? "⚡ Mining Order onto Chain..."
+                   ? "Recording transaction..."
                   : "Proceed to Checkout →"}
               </button>
 
               <button className="clear-btn" onClick={onClearCart}>
-                Clear Cart
+                  Clear ledger
               </button>
             </div>
           </>

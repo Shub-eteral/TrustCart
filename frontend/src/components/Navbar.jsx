@@ -1,3 +1,5 @@
+import TrustCartLogo from "./TrustCartLogo";
+
 export default function Navbar({
   activeTab,
   setActiveTab,
@@ -13,18 +15,19 @@ export default function Navbar({
   return (
     <header className="navbar">
       <div className="nav-inner">
-        <button
+        <a
+          href="/"
           className="logo-btn"
-          onClick={() => {
+          aria-label="TrustCart — Home"
+          onClick={(event) => {
+            event.preventDefault();
+            window.history.pushState({}, "", "/");
             setActiveTab("home");
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
         >
-          <span className="logo-text">
-            Trust<span className="accent">Cart</span>
-          </span>
-          <span className="logo-pill">SHA-256 LEDGER</span>
-        </button>
+          <TrustCartLogo variant="compact" dark />
+        </a>
 
         {activeTab === "home" && (
           <div className="nav-search">
@@ -43,7 +46,7 @@ export default function Navbar({
             className={`nav-btn ${activeTab === "home" ? "active" : ""}`}
             onClick={() => setActiveTab("home")}
           >
-            🏪 Catalog
+            Catalog
           </button>
 
           <button
@@ -57,11 +60,11 @@ export default function Navbar({
               setActiveTab("orders");
             }}
           >
-            📦 Orders
+            Orders
           </button>
 
           <button className="nav-btn" onClick={onOpenAccount}>
-            👤 {userEmail ? userEmail.split("@")[0] : "Account"}
+            {userEmail ? userEmail.split("@")[0] : "Account"}
           </button>
 
           <button
@@ -75,7 +78,7 @@ export default function Navbar({
               onOpenCart();
             }}
           >
-            🛒 Cart
+            Cart
             {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
           </button>
         </div>

@@ -9,6 +9,7 @@ export default function ProductGrid({
   search,
   onResetFilters,
   onAddToCart,
+  onSelectProduct,
 }) {
   return (
     <main className="products-section">
@@ -58,6 +59,7 @@ export default function ProductGrid({
               key={p.id}
               product={p}
               onAddToCart={onAddToCart}
+              onSelectProduct={onSelectProduct}
             />
           ))}
         </div>

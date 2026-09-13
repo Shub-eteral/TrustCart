@@ -1,15 +1,23 @@
-export function getCategoryIcon(category, name) {
-  const c = (category || "").toLowerCase();
-  const n = (name || "").toLowerCase();
-  if (c.includes("mob") || n.includes("phone") || n.includes("iphone")) return "📱";
-  if (c.includes("elec") || n.includes("laptop") || n.includes("macbook")) return "💻";
-  if (c.includes("fash") || n.includes("shirt") || n.includes("jacket")) return "👕";
-  if (c.includes("audio") || n.includes("headphone") || n.includes("earphone")) return "🎧";
-  if (c.includes("watch") || n.includes("smartwatch")) return "⌚";
-  if (c.includes("shoe") || n.includes("sneaker")) return "👟";
-  if (c.includes("home") || n.includes("decor")) return "🏠";
-  if (c.includes("beauty") || n.includes("perfume")) return "✨";
-  return "📦";
+export function getProductImage(product) {
+  const productName = (product?.name || "").toLowerCase();
+  const catalogImages = [
+    ["iphone", "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=85"],
+    ["galaxy", "https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?auto=format&fit=crop&w=900&q=85"],
+    ["macbook", "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=900&q=88"],
+    ["sony", "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=85"],
+    ["bose", "https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&w=900&q=85"],
+    ["rolex", "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=900&q=85"],
+    ["watch", "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=900&q=85"],
+    ["jordan", "https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=900&q=85"],
+  ];
+
+  return (
+    product?.imageUrl ||
+    product?.imageURL ||
+    product?.image ||
+    catalogImages.find(([keyword]) => productName.includes(keyword))?.[1] ||
+    null
+  );
 }
 
 function getCategoryClass(category, name) {
@@ -25,24 +33,44 @@ function getCategoryClass(category, name) {
   return "tone-general";
 }
 
-export default function ProductCard({ product, onAddToCart }) {
-  const icon = getCategoryIcon(product.category, product.name);
+export default function ProductCard({ product, onAddToCart, onSelectProduct }) {
   const tone = getCategoryClass(product.category, product.name);
   const isOutOfStock = product.stock <= 0;
+  const productMark = (product.category || product.name || "TC")
+    .slice(0, 2)
+    .toUpperCase();
+  const imageUrl = getProductImage(product);
 
   return (
-    <div className="product-card">
+    <article
+      className="product-card"
+      tabIndex="0"
+      role="button"
+      onClick={() => onSelectProduct(product)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelectProduct(product);
+        }
+      }}
+      aria-label={`View details for ${product.name}`}
+    >
       <div className={`product-img-wrap ${tone}`}>
-        <div className="product-aura" />
-        <div className="product-symbol" aria-hidden="true">
-          {icon}
-        </div>
+        {imageUrl ? (
+          <img className="product-image" src={imageUrl} alt={product.name} />
+        ) : (
+          <>
+            <div className="product-aura" />
+            <div className="product-symbol" aria-hidden="true">
+              {productMark}
+            </div>
+          </>
+        )}
         <div className="prod-hash-badge">
-          <span>🛡️</span>
           <span>
             {product.productHash
               ? `${product.productHash.slice(0, 8)}...`
-              : "VERIFIED"}
+              : "HASH PENDING"}
           </span>
         </div>
       </div>
@@ -51,11 +79,6 @@ export default function ProductCard({ product, onAddToCart }) {
         <div className="product-cat">{product.category || "General"}</div>
         <h3 className="product-name">{product.name}</h3>
         <p className="product-desc">{product.description}</p>
-
-        <div className="product-stars">
-          <span className="stars">★★★★★</span>
-          <span className="star-count">(4.9)</span>
-        </div>
 
         <div className="product-footer">
           <div className="prod-price-wrap">
@@ -70,13 +93,18 @@ export default function ProductCard({ product, onAddToCart }) {
           <button
             className="add-btn"
             disabled={isOutOfStock}
-            onClick={() => onAddToCart(product.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAddToCart(product.id);
+            }}
             title={isOutOfStock ? "Product Out of Stock" : "Add to Cart"}
+            aria-label={isOutOfStock ? `${product.name} is out of stock` : `Add ${product.name} to cart`}
           >
-            +
+            <span className="add-mark" aria-hidden="true">+</span>
+            <span>Add</span>
           </button>
         </div>
       </div>
-    </div>
+    </article>
   );
 }

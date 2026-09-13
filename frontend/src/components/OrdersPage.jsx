@@ -11,10 +11,10 @@ export default function OrdersPage({
   return (
     <main className="orders-page">
       <div className="page-head">
-        <h1>Cryptographic Order History</h1>
+          <h1>Transaction ledger</h1>
         <p>
-          Inspect your purchase pedigree and run live consensus checks against
-          the TrustCart blockchain.
+            Review completed orders, their timestamps, and the transaction hashes
+            returned by TrustCart verification.
         </p>
       </div>
 
@@ -25,14 +25,14 @@ export default function OrdersPage({
         </div>
       ) : orders.length === 0 ? (
         <div className="page-center">
-          <div className="big-icon">📦</div>
-          <h2>No Orders Recorded Yet</h2>
+            <div className="big-icon" aria-hidden="true">NO RECORDS</div>
+            <h2>No orders recorded yet</h2>
           <p>
-            Once you complete a purchase, its block hash and cryptographic proof
+            Once you complete a purchase, its transaction hash and verification result
             will appear here.
           </p>
           <button className="btn-primary" onClick={onNavigateHome}>
-            Start Shopping →
+              Start shopping
           </button>
         </div>
       ) : (
@@ -46,7 +46,7 @@ export default function OrdersPage({
                 <div className="order-card-top">
                   <div className="order-id-text">
                     <span className="pre">TX #</span>
-                    <span>{order.id}</span>
+                      <span>{order.id}</span>
                   </div>
                   <div
                     className={`status-badge ${
@@ -83,9 +83,7 @@ export default function OrdersPage({
                 </div>
 
                 <div className="order-hash-row">
-                  <div className="hash-label">
-                    <span>⛓️</span> SHA-256 HASH:
-                  </div>
+                    <div className="hash-label">TRANSACTION HASH</div>
                   <div className="hash-value" title={order.blockchainHash}>
                     {order.blockchainHash || "N/A"}
                   </div>
@@ -99,7 +97,7 @@ export default function OrdersPage({
                       )
                     }
                   >
-                    📋 Copy
+                      Copy hash
                   </button>
 
                   <button

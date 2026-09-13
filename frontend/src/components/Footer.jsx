@@ -1,13 +1,13 @@
+import TrustCartLogo from "./TrustCartLogo";
+
 export default function Footer() {
   return (
     <footer className="site-footer">
       <div className="footer-top">
         <div>
-          <div className="footer-logo-text">
-            Trust<span className="accent">Cart</span>
-          </div>
+          <TrustCartLogo variant="footer" dark />
           <div className="footer-tagline">
-            Next-Generation Cryptographically Verified E-Commerce.
+            Secure commerce for a safer web.
           </div>
         </div>
 
@@ -24,7 +24,7 @@ export default function Footer() {
 
       <div className="footer-bottom">
         <div>© 2026 TrustCart Core Protocol. All rights reserved.</div>
-        <div>Secure End-to-End Encryption Enabled</div>
+        <div>Product and order identifiers shown when provided by the platform</div>
       </div>
     </footer>
   );

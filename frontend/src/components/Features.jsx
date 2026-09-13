@@ -3,34 +3,34 @@ export default function Features() {
     <section className="features-strip">
       <div className="features-grid">
         <div className="feature-item">
-          <div className="feature-icon">🛡️</div>
+          <div className="feature-icon" aria-hidden="true">01</div>
           <div className="feature-text">
-            <h4>SHA-256 Ledger</h4>
-            <p>Every transaction is locked in cryptographic proof.</p>
+            <h4>Product identity</h4>
+            <p>Catalog records expose the product hash supplied by the platform.</p>
           </div>
         </div>
 
         <div className="feature-item">
-          <div className="feature-icon">⚡</div>
+          <div className="feature-icon" aria-hidden="true">02</div>
           <div className="feature-text">
-            <h4>Instant Verification</h4>
-            <p>Audit order and product authenticity with one click.</p>
+            <h4>Order verification</h4>
+            <p>Run the available blockchain verification check against an order.</p>
           </div>
         </div>
 
         <div className="feature-item">
-          <div className="feature-icon">🔒</div>
+          <div className="feature-icon" aria-hidden="true">03</div>
           <div className="feature-text">
-            <h4>Zero Counterfeiting</h4>
-            <p>Each SKU carries an immutable cryptographic fingerprint.</p>
+            <h4>Account custody</h4>
+            <p>Authenticated customers can review their own order history.</p>
           </div>
         </div>
 
         <div className="feature-item">
-          <div className="feature-icon">📦</div>
+          <div className="feature-icon" aria-hidden="true">04</div>
           <div className="feature-text">
-            <h4>Transparent Origin</h4>
-            <p>End-to-end chain of custody from warehouse to porch.</p>
+            <h4>Structured records</h4>
+            <p>Amounts, timestamps, statuses, and hashes stay together in one view.</p>
           </div>
         </div>
       </div>

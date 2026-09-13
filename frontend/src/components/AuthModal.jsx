@@ -29,7 +29,7 @@ export default function AuthModal({
     >
       <div className="auth-modal">
         <button className="modal-close" onClick={onClose}>
-          ✕
+            Close
         </button>
 
         {token ? (
@@ -40,7 +40,7 @@ export default function AuthModal({
               Role:{" "}
               <strong style={{ color: "var(--blue-lt)" }}>{userRole}</strong>
               <br />
-              Authenticated with JSON Web Token
+                Signed in to your TrustCart account
             </p>
 
             <button

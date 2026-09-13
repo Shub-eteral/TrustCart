@@ -25,6 +25,9 @@ public class Product {
     @Column(nullable = false)
     private String category;
 
+    @Column(name = "image_url")
+    private String imageUrl;
+
     // Blockchain-related identifier
     @Column(unique = true, nullable = false)
     private String productHash;
@@ -85,6 +88,14 @@ public class Product {
 
     public void setCategory(String category) {
         this.category = category;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public String getProductHash() {

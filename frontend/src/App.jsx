@@ -4,6 +4,7 @@ import "./App.css";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
 import ProductGrid from "./components/ProductGrid";
+import ProductDetailModal from "./components/ProductDetailModal";
 import OrdersPage from "./components/OrdersPage";
 import CartModal from "./components/CartModal";
 import AuthModal from "./components/AuthModal";
@@ -22,6 +23,7 @@ export default function App() {
   const [cart, setCart] = useState([]);
   const [orders, setOrders] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [search, setSearch] = useState("");
 
   // Modals
@@ -469,6 +471,7 @@ export default function App() {
               setSelectedCategory("All");
             }}
             onAddToCart={addToCart}
+            onSelectProduct={setSelectedProduct}
           />
 
           <Features />
@@ -488,6 +491,12 @@ export default function App() {
 
       {/* Footer */}
       <Footer />
+
+      <ProductDetailModal
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onAddToCart={addToCart}
+      />
 
       {/* Slide-over Cart Drawer */}
       <CartModal
