@@ -121,4 +121,17 @@ public class OrderController {
                 "Order verification failed or blockchain was tampered with"
         );
     }
+
+    // Cancel an order
+    @PutMapping("/{orderId}/cancel")
+    public ResponseEntity<Order> cancelOrder(
+            @PathVariable Long orderId,
+            Authentication authentication) {
+
+        String email = authentication.getName();
+
+        Order cancelledOrder = orderService.cancelOrder(orderId, email);
+
+        return ResponseEntity.ok(cancelledOrder);
+    }
 }

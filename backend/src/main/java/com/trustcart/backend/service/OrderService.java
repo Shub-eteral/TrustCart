@@ -167,6 +167,32 @@ public class OrderService {
         return orderItemRepository.findByOrder(order);
     }
 
+    // Cancel an order
+    @Transactional
+    public Order cancelOrder(Long orderId, String email) {
+
+        Order order = getOrderById(orderId);
+
+        if (!order.getUser().getEmail().equals(email)) {
+            throw new RuntimeException("Unauthorized to cancel this order");
+        }
+
+        if (!"PLACED".equals(order.getStatus()) && !"CONFIRMED".equals(order.getStatus())) {
+            throw new RuntimeException("Order cannot be cancelled in current status: " + order.getStatus());
+        }
+
+        List<OrderItem> orderItems = orderItemRepository.findByOrder(order);
+
+        for (OrderItem orderItem : orderItems) {
+            Product product = orderItem.getProduct();
+            product.setStock(product.getStock() + orderItem.getQuantity());
+            productRepository.save(product);
+        }
+
+        order.setStatus("CANCELLED");
+        return orderRepository.save(order);
+    }
+
     // Verify blockchain record of an order
     public boolean verifyOrderBlockchain(Long orderId) {
 

@@ -3,15 +3,33 @@ import "./App.css";
 
 const API_URL = "http://localhost:8080";
 
+const groceryFallbackProducts = [
+  { id: "grocery-mango", name: "Alphonso Mangoes", description: "Tree-ripened seasonal fruit, hand selected.", price: 349, stock: 18, category: "Groceries" },
+  { id: "grocery-coffee", name: "Roasted Arabica Coffee", description: "Small-batch beans with a silky finish.", price: 599, stock: 24, category: "Groceries" },
+  { id: "grocery-pasta", name: "Italian Bronze Pasta", description: "Slow-dried durum wheat pasta for dinner.", price: 189, stock: 42, category: "Groceries" },
+  { id: "grocery-honey", name: "Wildflower Honey", description: "Raw, unfiltered honey from local apiaries.", price: 425, stock: 16, category: "Groceries" },
+];
+
 function App() {
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [cartError, setCartError] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [showDeals, setShowDeals] = useState(false);
+  const [wishlist, setWishlist] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("trustcart-wishlist") || "[]");
+    } catch {
+      return [];
+    }
+  });
 
   const [showAccount, setShowAccount] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  const [showOrders, setShowOrders] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
 
   const [name, setName] = useState("");
@@ -20,6 +38,8 @@ function App() {
 
   const [loginLoading, setLoginLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [orders, setOrders] = useState([]);
 
   const token = localStorage.getItem("token");
 
@@ -44,9 +64,10 @@ function App() {
       }
 
       const data = await response.json();
-      setProducts(data);
+      setProducts(data.length ? data : groceryFallbackProducts);
     } catch (error) {
       console.error("Error loading products:", error);
+      setProducts(groceryFallbackProducts);
     } finally {
       setLoading(false);
     }
@@ -71,12 +92,22 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to fetch cart");
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem("token");
+          setCart([]);
+          setCartCount(0);
+          setCartError("Your session expired. Please sign in again.");
+          setShowCart(false);
+          setShowAccount(true);
+          return;
+        }
+        throw new Error(`Cart request failed (${response.status})`);
       }
 
       const data = await response.json();
 
       setCart(data);
+      setCartError("");
 
       const totalQuantity = data.reduce(
         (total, item) => total + item.quantity,
@@ -86,6 +117,74 @@ function App() {
       setCartCount(totalQuantity);
     } catch (error) {
       console.error("Error loading cart:", error);
+      setCartError("We couldn't reach your cart. Check that the backend is running, then retry.");
+    }
+  };
+
+  // =========================
+  // ORDERS
+  // =========================
+
+  const fetchOrders = async () => {
+    const currentToken = localStorage.getItem("token");
+
+    if (!currentToken) {
+      return;
+    }
+
+    setOrdersLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/orders`, {
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch orders");
+      }
+
+      const data = await response.json();
+      setOrders(data);
+    } catch (error) {
+      console.error("Error loading orders:", error);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const cancelOrder = async (orderId) => {
+    const currentToken = localStorage.getItem("token");
+
+    if (!currentToken) {
+      alert("Please login first.");
+      return;
+    }
+
+    if (!window.confirm("Are you sure you want to cancel this order?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/orders/${orderId}/cancel`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to cancel order");
+      }
+
+      const cancelledOrder = await response.json();
+      alert(`Order ${cancelledOrder.id} cancelled successfully!`);
+      await fetchOrders();
+    } catch (error) {
+      console.error("Cancel order error:", error);
+      alert(error.message || "Failed to cancel order");
     }
   };
 
@@ -391,11 +490,24 @@ function App() {
   // FILTER
   // =========================
 
-  const filteredProducts = products.filter((product) =>
-    product.name
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = `${product.name} ${product.description} ${product.category}`
       .toLowerCase()
-      .includes(search.toLowerCase())
-  );
+      .includes(search.toLowerCase());
+    const matchesCategory = activeCategory === "All" || product.category?.toLowerCase() === activeCategory.toLowerCase();
+    const matchesDeals = !showDeals || product.price < 500;
+    return matchesSearch && matchesCategory && matchesDeals;
+  });
+
+  const categories = [...new Set(["All", ...products.map((product) => product.category).filter(Boolean), "Groceries"] )];
+
+  const toggleWishlist = (productId) => {
+    const nextWishlist = wishlist.includes(productId)
+      ? wishlist.filter((id) => id !== productId)
+      : [...wishlist, productId];
+    setWishlist(nextWishlist);
+    localStorage.setItem("trustcart-wishlist", JSON.stringify(nextWishlist));
+  };
 
   // =========================
   // CART TOTAL
@@ -447,9 +559,15 @@ function App() {
 
           <button
             className="nav-link"
-            onClick={() =>
-              alert("Orders page coming next.")
-            }
+            onClick={() => {
+              if (!token) {
+                alert("Please login first.");
+                setShowAccount(true);
+                return;
+              }
+              fetchOrders();
+              setShowOrders(true);
+            }}
           >
             📦 Orders
           </button>
@@ -484,14 +602,25 @@ function App() {
 
       <nav className="category-bar">
 
-        <span>☰ All</span>
-        <span>Electronics</span>
-        <span>Mobiles</span>
-        <span>Fashion</span>
-        <span>Home</span>
-        <span>Beauty</span>
-        <span>Groceries</span>
-        <span>Today's Deals</span>
+        {categories.map((category) => (
+          <button
+            className={activeCategory === category ? "category-active" : ""}
+            key={category}
+            onClick={() => setActiveCategory(category)}
+          >
+            {category === "All" ? "☰ All" : category}
+          </button>
+        ))}
+        <button
+          className={showDeals ? "category-active" : ""}
+          onClick={() => {
+            setShowDeals(true);
+            setSearch("");
+            setActiveCategory("All");
+          }}
+        >
+          Today's Deals
+        </button>
 
       </nav>
 
@@ -535,17 +664,22 @@ function App() {
 
         <div className="hero-card">
 
-          <div className="hero-icon">
-            🛍️
+          <div className="hero-orbit orbit-one" />
+          <div className="hero-orbit orbit-two" />
+          <div className="hero-object" aria-label="Glossy TrustCart package">
+            <div className="object-gloss" />
+            <div className="object-mark">TC</div>
+            <div className="object-line line-one" />
+            <div className="object-line line-two" />
+            <div className="object-seal">✓</div>
           </div>
+          <div className="hero-shadow" />
 
-          <h2>
-            Secure Shopping
-          </h2>
-
-          <p>
-            Every order can be verified on our blockchain.
-          </p>
+          <div className="hero-card-copy">
+            <span className="hero-card-kicker">TRUSTED BY DESIGN</span>
+            <h2>Secure Shopping</h2>
+            <p>Every order is protected, trackable and verified on our blockchain.</p>
+          </div>
 
         </div>
 
@@ -572,7 +706,11 @@ function App() {
 
           <button
             className="view-all"
-            onClick={() => setSearch("")}
+            onClick={() => {
+              setSearch("");
+              setActiveCategory("All");
+              setShowDeals(false);
+            }}
           >
             View All →
           </button>
@@ -603,8 +741,15 @@ function App() {
                 key={product.id}
               >
 
-                <div className="product-image">
-                  📱
+                <div className={`product-image product-image-${product.category?.toLowerCase().replace(/\s+/g, "-")}`}>
+                  {product.category?.toLowerCase().includes("groc") ? "🥭" : "📱"}
+                  <button
+                    className={`wishlist-button ${wishlist.includes(product.id) ? "is-wishlisted" : ""}`}
+                    aria-label={wishlist.includes(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+                    onClick={() => toggleWishlist(product.id)}
+                  >
+                    {wishlist.includes(product.id) ? "♥" : "♡"}
+                  </button>
                 </div>
 
                 <div className="product-info">
@@ -947,6 +1092,13 @@ function App() {
 
       {/* ================= CART MODAL ================= */}
 
+      {cartError && !showCart && (
+        <div className="cart-error-toast" role="alert">
+          <span>{cartError}</span>
+          <button onClick={() => fetchCart()}>Retry cart</button>
+        </div>
+      )}
+
       {showCart && (
 
         <div
@@ -980,7 +1132,14 @@ function App() {
             </div>
 
 
-            {cart.length === 0 ? (
+            {cartError ? (
+              <div className="empty-cart cart-recovery">
+                <div className="empty-cart-icon">⚡</div>
+                <h3>Cart connection interrupted</h3>
+                <p>{cartError}</p>
+                <button className="account-action" onClick={fetchCart}>Retry cart</button>
+              </div>
+            ) : cart.length === 0 ? (
 
               <div className="empty-cart">
 
@@ -1155,6 +1314,182 @@ function App() {
                 </div>
 
               </>
+
+            )}
+
+          </div>
+
+        </div>
+
+      )}
+
+      {/* ================= ORDERS MODAL ================= */}
+
+      {showOrders && (
+
+        <div
+          className="orders-overlay"
+          onClick={(e) => {
+            if (
+              e.target === e.currentTarget
+            ) {
+              setShowOrders(false);
+            }
+          }}
+        >
+
+          <div className="orders-modal">
+
+            <div className="orders-header">
+
+              <h2>
+                📦 Your Orders
+              </h2>
+
+              <button
+                className="close-button"
+                onClick={() =>
+                  setShowOrders(false)
+                }
+              >
+                ✕
+              </button>
+
+            </div>
+
+            {ordersLoading ? (
+
+              <div className="loading">
+                Loading orders...
+              </div>
+
+            ) : orders.length === 0 ? (
+
+              <div className="empty-orders">
+
+                <div className="empty-orders-icon">
+                  📦
+                </div>
+
+                <h3>
+                  No orders yet
+                </h3>
+
+                <p>
+                  Your orders will appear here.
+                </p>
+
+                <button
+                  className="account-action"
+                  onClick={() =>
+                    setShowOrders(false)
+                  }
+                >
+                  Continue Shopping
+                </button>
+
+              </div>
+
+            ) : (
+
+              <div className="orders-list">
+
+                {orders.map((order) => (
+
+                  <div
+                    className="order-card"
+                    key={order.id}
+                  >
+
+                    <div className="order-header">
+
+                      <div>
+
+                        <h3>
+                          Order #{order.id}
+                        </h3>
+
+                        <p className="order-date">
+                          {new Date(order.orderDate).toLocaleDateString("en-IN", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </p>
+
+                      </div>
+
+                      <span
+                        className={`order-status ${order.status.toLowerCase()}`}
+                      >
+                        {order.status}
+                      </span>
+
+                    </div>
+
+                    <div className="order-details">
+
+                      <div className="order-items-preview">
+                        {order.items ? order.items.slice(0, 3).map((item) => (
+                          <div key={item.id} className="order-item-preview">
+                            <span>{item.product.name} × {item.quantity}</span>
+                            <span>₹{(item.price * item.quantity).toLocaleString("en-IN")}</span>
+                          </div>
+                        )) : (
+                          <span>Loading items...</span>
+                        )}
+                        {order.items && order.items.length > 3 && (
+                          <span className="more-items">
+                            +{order.items.length - 3} more items
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="order-summary">
+
+                        <div className="summary-row">
+                          <span>Total</span>
+                          <strong>₹{order.totalAmount.toLocaleString("en-IN")}</strong>
+                        </div>
+
+                        {order.blockchainHash && (
+                          <div className="blockchain-hash">
+                            <span>Blockchain: </span>
+                            <code>{order.blockchainHash.substring(0, 32)}...</code>
+                          </div>
+                        )}
+
+                      </div>
+
+                    </div>
+
+                    <div className="order-actions">
+
+                      {["PLACED", "CONFIRMED"].includes(order.status) && (
+                        <button
+                          className="cancel-button"
+                          onClick={() => cancelOrder(order.id)}
+                        >
+                          Cancel Order
+                        </button>
+                      )}
+
+                      <button
+                        className="view-button"
+                        onClick={() => alert("Order details view coming soon!")}
+                      >
+                        View Details
+                      </button>
+
+                    </div>
+
+                  </div>
+
+                ))}
+
+              </div>
 
             )}
 
