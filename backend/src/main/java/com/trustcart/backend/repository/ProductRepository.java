@@ -10,4 +10,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Optional<Product> findByProductHash(String productHash);
 
     boolean existsByProductHash(String productHash);
+
+    boolean existsByName(String name);
 }
