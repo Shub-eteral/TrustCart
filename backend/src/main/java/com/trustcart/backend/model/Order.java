@@ -29,6 +29,20 @@ public class Order {
     @Column
     private String blockchainHash;
 
+    // Payment fields
+    @Column
+    private String paymentMethod;
+
+    @Column
+    private String paymentStatus;
+
+    @Column
+    private String paymentReference;
+
+    // Kept for demonstration of tampering and restoration
+    @Column
+    private Double originalAmount;
+
     public Order() {
     }
 
@@ -42,6 +56,7 @@ public class Order {
         this.totalAmount = totalAmount;
         this.status = status;
         this.orderDate = orderDate;
+        this.originalAmount = totalAmount;
     }
 
     public Long getId() {
@@ -86,5 +101,37 @@ public class Order {
 
     public void setBlockchainHash(String blockchainHash) {
         this.blockchainHash = blockchainHash;
+    }
+
+    public String getPaymentMethod() {
+        return paymentMethod;
+    }
+
+    public void setPaymentMethod(String paymentMethod) {
+        this.paymentMethod = paymentMethod;
+    }
+
+    public String getPaymentStatus() {
+        return paymentStatus;
+    }
+
+    public void setPaymentStatus(String paymentStatus) {
+        this.paymentStatus = paymentStatus;
+    }
+
+    public String getPaymentReference() {
+        return paymentReference;
+    }
+
+    public void setPaymentReference(String paymentReference) {
+        this.paymentReference = paymentReference;
+    }
+
+    public Double getOriginalAmount() {
+        return originalAmount != null ? originalAmount : totalAmount;
+    }
+
+    public void setOriginalAmount(Double originalAmount) {
+        this.originalAmount = originalAmount;
     }
 }

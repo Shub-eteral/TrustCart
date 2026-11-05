@@ -71,13 +71,8 @@ public class SecurityConfig {
         CorsConfiguration configuration =
                 new CorsConfiguration();
 
-        configuration.setAllowedOrigins(
-                List.of(
-                        "http://localhost:5173",
-                        "http://127.0.0.1:5173",
-                        "http://localhost:5174",
-                        "http://127.0.0.1:5174"
-                )
+        configuration.setAllowedOriginPatterns(
+                List.of("*")
         );
 
         configuration.setAllowedMethods(
@@ -86,14 +81,19 @@ public class SecurityConfig {
                         "POST",
                         "PUT",
                         "DELETE",
-                        "OPTIONS"
+                        "OPTIONS",
+                        "HEAD",
+                        "PATCH"
                 )
         );
 
         configuration.setAllowedHeaders(
                 List.of(
                         "Authorization",
-                        "Content-Type"
+                        "Content-Type",
+                        "Accept",
+                        "Origin",
+                        "X-Requested-With"
                 )
         );
 
@@ -136,17 +136,24 @@ public class SecurityConfig {
                                 "/**"
                         ).permitAll()
 
-                        // Public user endpoints
+                        // Public user endpoints and error handling
                         .requestMatchers(
                                 "/api/users/register",
-                                "/api/users/login"
+                                "/api/users/login",
+                                "/error"
                         ).permitAll()
 
-                        // Public product viewing
+                        // Public product viewing (GET endpoints)
                         .requestMatchers(
-                                "/api/products",
-                                "/api/products/{id}",
-                                "/api/products/verify/{productHash}"
+                                org.springframework.http.HttpMethod.GET,
+                                "/api/products/**"
+                        ).permitAll()
+
+                        // Public blockchain inspection
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET,
+                                "/api/blockchain",
+                                "/api/blockchain/**"
                         ).permitAll()
 
                         // Everything else requires login

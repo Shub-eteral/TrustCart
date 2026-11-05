@@ -1,8 +1,11 @@
 package com.trustcart.backend.config;
 
 import com.trustcart.backend.model.Product;
+import com.trustcart.backend.model.User;
 import com.trustcart.backend.repository.ProductRepository;
+import com.trustcart.backend.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -11,13 +14,28 @@ import java.util.UUID;
 public class ProductDataInitializer implements CommandLineRunner {
 
     private final ProductRepository productRepository;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public ProductDataInitializer(ProductRepository productRepository) {
+    public ProductDataInitializer(ProductRepository productRepository,
+                                  UserRepository userRepository,
+                                  PasswordEncoder passwordEncoder) {
         this.productRepository = productRepository;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
     public void run(String... args) {
+        if (!userRepository.existsByEmail("demo@trustcart.com")) {
+            userRepository.save(new User(
+                    "Demo Shopper",
+                    "demo@trustcart.com",
+                    passwordEncoder.encode("password123"),
+                    "CUSTOMER"
+            ));
+        }
+
         boolean hasGroceries = productRepository.findAll().stream()
                 .anyMatch(product -> "Groceries".equalsIgnoreCase(product.getCategory()));
 
