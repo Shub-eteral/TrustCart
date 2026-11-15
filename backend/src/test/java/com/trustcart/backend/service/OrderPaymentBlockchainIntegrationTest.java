@@ -129,4 +129,27 @@ class OrderPaymentBlockchainIntegrationTest {
         OrderVerificationDTO restoredVerification = orderService.verifyOrderBlockchain(orderId);
         assertTrue(restoredVerification.isValid(), "Restored order must verify successfully again");
     }
+
+    @Test
+    @Transactional
+    void testCashOnDeliveryAndDirectConfirmFlow() {
+        // Add item to cart
+        cartItemRepository.save(new CartItem(testUser, testProduct, 1));
+
+        // Direct confirmation without prior payment initiation call
+        PaymentConfirmDTO codRequest = new PaymentConfirmDTO();
+        codRequest.setPaymentMethod("COD");
+        codRequest.setTransactionNote("Cash on delivery demo");
+
+        PaymentResponseDTO codResult = paymentService.confirmPayment(testUser.getEmail(), codRequest);
+        assertNotNull(codResult);
+        assertEquals("COD", codResult.getPaymentStatus());
+        assertNotNull(codResult.getOrderId());
+        assertNotNull(codResult.getBlockchainHash());
+        assertTrue(cartItemRepository.findByUser(testUser).isEmpty());
+
+        // Verify that the order can be verified
+        OrderVerificationDTO verify = orderService.verifyOrderBlockchain(codResult.getOrderId());
+        assertTrue(verify.isValid());
+    }
 }

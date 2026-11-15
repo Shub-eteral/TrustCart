@@ -14,6 +14,24 @@ const API_URL =
   (typeof window !== "undefined" && window.location && window.location.hostname)
     ? `http://${window.location.hostname}:8080`
     : "http://localhost:8080";
+
+const parseResponseError = async (res, defaultMsg = "Request failed") => {
+  if (res.status === 401 || res.status === 403) {
+    return "Session expired or authentication failed. Please sign in again.";
+  }
+  try {
+    const raw = await res.text();
+    if (!raw) return `${defaultMsg} (HTTP ${res.status})`;
+    try {
+      const data = JSON.parse(raw);
+      return data.message || data.error || data.failureReason || raw;
+    } catch {
+      return raw;
+    }
+  } catch {
+    return `${defaultMsg} (HTTP ${res.status})`;
+  }
+};
 const fallbackProducts = [
   { id: "fallback-mango", name: "Alphonso Mangoes", description: "Tree-ripened seasonal fruit, hand selected.", price: 349, category: "Groceries", icon: "🥭", image: "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&w=900&q=85" },
   { id: "fallback-coffee", name: "Roasted Arabica Coffee", description: "Small-batch beans with a silky finish.", price: 599, category: "Groceries", icon: "☕", image: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=900&q=85" },
@@ -50,16 +68,10 @@ function AuthModal({ open, onClose, onSuccess }) {
         body: JSON.stringify(register ? form : { email: form.email, password: form.password }),
       });
       if (!response.ok) {
-        let msg = register ? "Registration failed." : "Invalid email or password.";
-        try {
-          const data = await response.json();
-          if (data && (data.message || data.error)) {
-            msg = data.message || data.error;
-          }
-        } catch (_) {
-          const text = await response.text();
-          if (text) msg = text;
-        }
+        const msg = await parseResponseError(
+          response,
+          register ? "Registration failed." : "Invalid email or password."
+        );
         throw new Error(msg);
       }
       const data = await response.json();
@@ -212,34 +224,45 @@ export default function Storefront() {
   const [userOrders, setUserOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  const token = localStorage.getItem("token");
-  const userEmail = localStorage.getItem("userEmail") || "customer@trustcart.io";
+  const [token, setToken] = useState(() => localStorage.getItem("token") || "");
+  const [userEmail, setUserEmail] = useState(() => localStorage.getItem("userEmail") || "customer@trustcart.io");
 
-  const loadCart = async () => {
-    const currentToken = localStorage.getItem("token");
+  const loadCart = async (explicitToken) => {
+    const currentToken = explicitToken || token || localStorage.getItem("token");
     if (!currentToken) return setCart([]);
     try {
       const response = await fetch(`${API_URL}/api/cart`, {
         headers: { Authorization: `Bearer ${currentToken}` },
       });
-      if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
         localStorage.removeItem("token");
+        localStorage.removeItem("userEmail");
+        setToken("");
         return setCart([]);
       }
-      setCart(await response.json());
+      if (response.ok) {
+        setCart(await response.json());
+      }
     } catch {
-      setCart([]);
+      // Don't wipe token on network blip
     }
   };
 
-  const loadOrders = async () => {
-    const currentToken = localStorage.getItem("token");
+  const loadOrders = async (explicitToken) => {
+    const currentToken = explicitToken || token || localStorage.getItem("token");
     if (!currentToken) return;
     setOrdersLoading(true);
     try {
       const response = await fetch(`${API_URL}/api/orders`, {
         headers: { Authorization: `Bearer ${currentToken}` },
       });
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("userEmail");
+        setToken("");
+        setUserOrders([]);
+        return;
+      }
       if (response.ok) {
         setUserOrders(await response.json());
       }
@@ -259,7 +282,8 @@ export default function Storefront() {
       .catch(() => {})
       .finally(() => setLoading(false));
 
-    if (token) loadCart().catch(() => {});
+    const activeTok = token || localStorage.getItem("token");
+    if (activeTok) loadCart(activeTok).catch(() => {});
     const trigger = ScrollTrigger.create({
       start: 0,
       end: "max",
@@ -271,39 +295,86 @@ export default function Storefront() {
   const featuredProducts = useMemo(() => products.slice(0, 4), [products]);
 
   const addToCart = async (product) => {
-    if (!localStorage.getItem("token")) return setAuthOpen(true);
-    if (String(product.id).startsWith("fallback"))
-      return setToast("Connect catalog to purchase this item.");
+    const currentToken = token || localStorage.getItem("token");
+    if (!currentToken) {
+      setAuthOpen(true);
+      setToast("Please sign in to add items to your cart.");
+      setTimeout(() => setToast(""), 3000);
+      return;
+    }
+    if (String(product.id).startsWith("fallback")) {
+      setToast("Connect catalog to purchase this item.");
+      setTimeout(() => setToast(""), 3000);
+      return;
+    }
 
-    const response = await fetch(
-      `${API_URL}/api/cart/add?productId=${product.id}&quantity=1`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    try {
+      const response = await fetch(
+        `${API_URL}/api/cart/add?productId=${product.id}&quantity=1`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${currentToken}` },
+        }
+      );
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("userEmail");
+        setToken("");
+        setCart([]);
+        setAuthOpen(true);
+        setToast("Session expired. Please sign in again.");
+        setTimeout(() => setToast(""), 3500);
+        return;
       }
-    );
-    if (!response.ok) return setToast("We could not add that item right now.");
-    await loadCart();
-    setCartOpen(true);
-    setToast(`${product.name} added to cart`);
-    setTimeout(() => setToast(""), 2400);
+      if (!response.ok) {
+        const errorMsg = await parseResponseError(
+          response,
+          "We could not add that item right now."
+        );
+        setToast(errorMsg);
+        setTimeout(() => setToast(""), 3500);
+        return;
+      }
+      await loadCart(currentToken);
+      setCartOpen(true);
+      setToast(`${product.name} added to cart`);
+      setTimeout(() => setToast(""), 2400);
+    } catch {
+      setToast("Failed to connect to cart service.");
+      setTimeout(() => setToast(""), 2400);
+    }
   };
 
   const removeFromCart = async (id) => {
-    const response = await fetch(`${API_URL}/api/cart/${id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-    });
-    if (response.ok) loadCart();
+    const currentToken = token || localStorage.getItem("token");
+    if (!currentToken) return;
+    try {
+      const response = await fetch(`${API_URL}/api/cart/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${currentToken}` },
+      });
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("userEmail");
+        setToken("");
+        setCart([]);
+        setAuthOpen(true);
+        return;
+      }
+      if (response.ok) loadCart(currentToken);
+    } catch {
+      // ignore
+    }
   };
 
   // Navigates to dedicated payment page when user clicks checkout
   const handleProceedToPayment = () => {
-    if (!localStorage.getItem("token")) {
+    const currentToken = token || localStorage.getItem("token");
+    if (!currentToken) {
       setAuthOpen(true);
       return;
     }
-    if (!cart.length) {
+    if (!cart || !cart.length) {
       setToast("Your cart is empty.");
       setTimeout(() => setToast(""), 2400);
       return;
@@ -314,11 +385,12 @@ export default function Storefront() {
   };
 
   const handleOrdersNav = () => {
-    if (!localStorage.getItem("token")) {
+    const currentToken = token || localStorage.getItem("token");
+    if (!currentToken) {
       setAuthOpen(true);
       return;
     }
-    loadOrders();
+    loadOrders(currentToken);
     setView("orders");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -326,6 +398,8 @@ export default function Storefront() {
   const handleSignOut = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("userEmail");
+    setToken("");
+    setUserEmail("customer@trustcart.io");
     setCart([]);
     setView("store");
     setToast("Signed out successfully");
@@ -664,8 +738,12 @@ export default function Storefront() {
       <AuthModal
         open={authOpen}
         onClose={() => setAuthOpen(false)}
-        onSuccess={() => {
-          loadCart();
+        onSuccess={(data) => {
+          const freshToken = (data && data.token) || localStorage.getItem("token") || "";
+          const freshEmail = (data && data.email) || localStorage.getItem("userEmail") || "customer@trustcart.io";
+          setToken(freshToken);
+          setUserEmail(freshEmail);
+          loadCart(freshToken);
           setToast("Welcome to TrustCart");
           setTimeout(() => setToast(""), 2400);
         }}

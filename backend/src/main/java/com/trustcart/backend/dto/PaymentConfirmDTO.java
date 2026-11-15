@@ -1,5 +1,7 @@
 package com.trustcart.backend.dto;
 
+import java.util.List;
+
 public class PaymentConfirmDTO {
 
     private Long paymentId;
@@ -7,6 +9,7 @@ public class PaymentConfirmDTO {
     private String paymentMethod;
     private boolean simulatedSuccess = true;
     private String transactionNote;
+    private java.util.List<PaymentRequestDTO.ItemDTO> items;
 
     public PaymentConfirmDTO() {
     }
@@ -15,6 +18,14 @@ public class PaymentConfirmDTO {
         this.paymentId = paymentId;
         this.paymentReferenceId = paymentReferenceId;
         this.simulatedSuccess = simulatedSuccess;
+    }
+
+    public List<PaymentRequestDTO.ItemDTO> getItems() {
+        return items;
+    }
+
+    public void setItems(List<PaymentRequestDTO.ItemDTO> items) {
+        this.items = items;
     }
 
     public Long getPaymentId() {

@@ -4,6 +4,24 @@ import "./OrdersPage.css";
 const API_URL = `http://${window.location.hostname}:8080`;
 const formatPrice = (val) => `₹${Number(val || 0).toLocaleString("en-IN")}`;
 
+const parseResponseError = async (res, defaultMsg = "Request failed") => {
+  if (res.status === 401 || res.status === 403) {
+    return "Session expired or authentication failed. Please sign in again.";
+  }
+  try {
+    const raw = await res.text();
+    if (!raw) return `${defaultMsg} (HTTP ${res.status})`;
+    try {
+      const data = JSON.parse(raw);
+      return data.message || data.error || data.failureReason || raw;
+    } catch {
+      return raw;
+    }
+  } catch {
+    return `${defaultMsg} (HTTP ${res.status})`;
+  }
+};
+
 export default function OrdersPage({
   orders = [],
   loading = false,
@@ -12,6 +30,11 @@ export default function OrdersPage({
   onNavigateHome,
   onRefreshOrders,
 }) {
+  const activeToken =
+    token ||
+    (typeof window !== "undefined" ? localStorage.getItem("token") : "") ||
+    "";
+
   const [verifying, setVerifying] = useState({});
   const [verificationResults, setVerificationResults] = useState({});
   const [copiedId, setCopiedId] = useState(null);
@@ -33,12 +56,13 @@ export default function OrdersPage({
     try {
       const res = await fetch(`${API_URL}/api/orders/${orderId}/verify`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${activeToken}`,
         },
       });
 
       if (!res.ok) {
-        throw new Error((await res.text()) || "Verification failed");
+        const errMsg = await parseResponseError(res, "Verification failed");
+        throw new Error(errMsg);
       }
 
       const result = await res.json();
@@ -69,7 +93,7 @@ export default function OrdersPage({
       try {
         const res = await fetch(`${API_URL}/api/orders/${orderId}/items`, {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${activeToken}`,
           },
         });
         if (res.ok) {
@@ -89,7 +113,7 @@ export default function OrdersPage({
       const res = await fetch(`${API_URL}/api/orders/${orderId}/tamper-test`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${activeToken}`,
         },
       });
       const data = await res.json();
@@ -110,7 +134,7 @@ export default function OrdersPage({
       const res = await fetch(`${API_URL}/api/orders/${orderId}/restore-test`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${activeToken}`,
         },
       });
       const data = await res.json();

@@ -1,9 +1,31 @@
 import { useState, useEffect } from "react";
 import "./PaymentPage.css";
 
-const API_URL = `http://${window.location.hostname}:8080`;
+const API_URL =
+  (typeof window !== "undefined" && window.location && window.location.hostname)
+    ? `http://${window.location.hostname}:8080`
+    : "http://localhost:8080";
 
 const formatPrice = (val) => `₹${Number(val || 0).toLocaleString("en-IN")}`;
+
+// Helper to safely extract error messages without consuming response streams twice
+const parseResponseError = async (res, defaultMsg = "Request failed") => {
+  if (res.status === 401 || res.status === 403) {
+    return "Session expired or authentication failed. Please sign in again.";
+  }
+  try {
+    const raw = await res.text();
+    if (!raw) return `${defaultMsg} (HTTP ${res.status})`;
+    try {
+      const data = JSON.parse(raw);
+      return data.message || data.error || data.failureReason || raw;
+    } catch {
+      return raw;
+    }
+  } catch {
+    return `${defaultMsg} (HTTP ${res.status})`;
+  }
+};
 
 export default function PaymentPage({
   cart = [],
@@ -12,6 +34,11 @@ export default function PaymentPage({
   onBack,
   onPaymentSuccess,
 }) {
+  const activeToken =
+    token ||
+    (typeof window !== "undefined" ? localStorage.getItem("token") : "") ||
+    "";
+
   const [paymentMethod, setPaymentMethod] = useState("UPI");
   const [upiId, setUpiId] = useState("student@okhdfcbank");
   const [cardData, setCardData] = useState({
@@ -34,17 +61,24 @@ export default function PaymentPage({
   const deliveryCharge = 0; // Free luxury delivery
   const totalAmount = subtotal + deliveryCharge;
 
-  // Initialize payment request on backend when mounting or changing method
+  // Pre-initialize payment request on backend when mounting or changing method
   useEffect(() => {
-    if (!token || !cart.length) return;
+    if (!activeToken || !cart.length) return;
 
     const initPayment = async () => {
       try {
+        const payloadItems = cart
+          .filter((item) => item.product?.id)
+          .map((item) => ({
+            productId: item.product.id,
+            quantity: item.quantity,
+          }));
+
         const res = await fetch(`${API_URL}/api/payments/create`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${activeToken}`,
           },
           body: JSON.stringify({
             paymentMethod,
@@ -54,6 +88,7 @@ export default function PaymentPage({
                 ? cardData.number.replace(/\s+/g, "").slice(-4)
                 : undefined,
             cardHolderName: paymentMethod === "CARD" ? cardData.name : undefined,
+            items: payloadItems,
           }),
         });
 
@@ -67,7 +102,7 @@ export default function PaymentPage({
     };
 
     initPayment();
-  }, [paymentMethod, token]);
+  }, [paymentMethod, activeToken]);
 
   const handleCardNumberChange = (e) => {
     let val = e.target.value.replace(/\D/g, "").slice(0, 16);
@@ -77,7 +112,7 @@ export default function PaymentPage({
 
   const handleExpiryChange = (e) => {
     let val = e.target.value.replace(/\D/g, "").slice(0, 4);
-    if (val.length >= 3) {
+    if (val.length > 2) {
       val = val.slice(0, 2) + "/" + val.slice(2);
     }
     setCardData({ ...cardData, expiry: val });
@@ -116,78 +151,121 @@ export default function PaymentPage({
     e.preventDefault();
     if (!validateForm()) return;
 
+    if (!activeToken) {
+      setError("Authentication required. Please sign in to complete your purchase.");
+      return;
+    }
+
+    if (!cart || cart.length === 0) {
+      setError("Your cart is empty. Please add products before paying.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
     try {
-      // Step 1: Initialize payment on backend if not already done
+      const cleanCardLast4 =
+        paymentMethod === "CARD"
+          ? cardData.number.replace(/\s+/g, "").slice(-4)
+          : undefined;
+
+      const payloadItems = cart
+        .filter((item) => item.product?.id)
+        .map((item) => ({
+          productId: item.product.id,
+          quantity: item.quantity,
+        }));
+
+      // Step 1: Initialize payment on backend if not already done or if method switched
       let activeReq = paymentRequest;
-      if (!activeReq) {
+      if (!activeReq || activeReq.paymentMethod !== paymentMethod) {
         setProcessingStep("Initiating secure transaction...");
         const initRes = await fetch(`${API_URL}/api/payments/create`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${activeToken}`,
           },
           body: JSON.stringify({
             paymentMethod,
             upiId: paymentMethod === "UPI" ? upiId : undefined,
-            cardLast4:
-              paymentMethod === "CARD"
-                ? cardData.number.replace(/\s+/g, "").slice(-4)
-                : undefined,
+            cardLast4: cleanCardLast4,
+            cardHolderName: paymentMethod === "CARD" ? cardData.name.trim() : undefined,
+            items: payloadItems,
           }),
         });
 
         if (!initRes.ok) {
-          throw new Error((await initRes.text()) || "Failed to initiate payment");
+          const errMsg = await parseResponseError(initRes, "Failed to initiate payment");
+          throw new Error(errMsg);
         }
         activeReq = await initRes.json();
         setPaymentRequest(activeReq);
       }
 
-      // Step 2: Simulated bank network connection animation
+      // Step 2: Simulated network connection & banking verification
       setProcessingStep("Connecting to payment processing network...");
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 500));
 
       setProcessingStep(
         paymentMethod === "COD"
           ? "Authorizing Cash on Delivery booking..."
+          : paymentMethod === "ONLINE"
+          ? "Authorizing via TrustCart Online Gateway..."
           : simulatedSuccess
           ? "Verifying transaction credentials..."
           : "Checking card & banking limits..."
       );
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 500));
 
       // Step 3: Call backend confirmation endpoint
       setProcessingStep("Recording on TrustCart Blockchain & finalizing...");
+      const transactionNote =
+        paymentMethod === "UPI"
+          ? `UPI ID: ${upiId}`
+          : paymentMethod === "CARD"
+          ? `Card ending in ${cleanCardLast4} (${cardData.name.trim()})`
+          : paymentMethod === "ONLINE"
+          ? "Online Gateway / Razorpay Test Mode"
+          : "Cash on delivery";
+
       const confirmRes = await fetch(`${API_URL}/api/payments/confirm`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${activeToken}`,
         },
         body: JSON.stringify({
           paymentId: activeReq.paymentId,
           paymentReferenceId: activeReq.paymentReferenceId,
           paymentMethod,
           simulatedSuccess: paymentMethod === "COD" ? true : simulatedSuccess,
-          transactionNote:
-            paymentMethod === "UPI"
-              ? `UPI ID: ${upiId}`
-              : paymentMethod === "CARD"
-              ? `Card ending in ${cardData.number.replace(/\s+/g, "").slice(-4)}`
-              : "Cash on delivery",
+          transactionNote,
+          items: payloadItems,
         }),
       });
 
-      const result = await confirmRes.json();
+      if (!confirmRes.ok) {
+        setPaymentRequest(null);
+        const errMsg = await parseResponseError(confirmRes, "Payment processing failed");
+        throw new Error(errMsg);
+      }
 
-      if (!confirmRes.ok || result.paymentStatus === "FAILED") {
+      let result;
+      try {
+        result = await confirmRes.json();
+      } catch (_) {
+        throw new Error("Unable to parse confirmation response from payment gateway.");
+      }
+
+      if (result.paymentStatus === "FAILED") {
+        // Reset payment request so next attempt creates fresh transaction
+        setPaymentRequest(null);
         throw new Error(
           result.failureReason ||
             result.message ||
+            result.error ||
             "Payment failed. Card or bank transaction was declined."
         );
       }
@@ -201,6 +279,62 @@ export default function PaymentPage({
       setProcessingStep("");
     }
   };
+
+  if (!cart || cart.length === 0) {
+    return (
+      <div className="payment-page-container">
+        <div className="payment-header">
+          <div>
+            <span className="eyebrow">TrustCart Secure Gateway</span>
+            <h1
+              style={{
+                fontFamily: "Space Grotesk, sans-serif",
+                fontSize: "32px",
+                margin: "6px 0 0",
+                letterSpacing: "-0.03em",
+              }}
+            >
+              Checkout &amp; Payment
+            </h1>
+          </div>
+          <button className="payment-back-btn" onClick={onBack}>
+            ← Return to selection
+          </button>
+        </div>
+        <div
+          className="payment-methods-card"
+          style={{ textAlign: "center", padding: "60px 20px" }}
+        >
+          <div style={{ fontSize: "44px", marginBottom: "16px" }}>🛒</div>
+          <h2 style={{ marginBottom: "10px" }}>Your cart is empty</h2>
+          <p
+            style={{
+              color: "rgba(247, 241, 231, 0.65)",
+              maxWidth: "420px",
+              margin: "0 auto 24px",
+              lineHeight: "1.6",
+            }}
+          >
+            Please add verified products to your cart before proceeding to checkout.
+          </p>
+          <button
+            type="button"
+            className="payment-back-btn"
+            style={{
+              padding: "12px 28px",
+              background: "var(--lime, #d9f06b)",
+              color: "#0c0b10",
+              fontWeight: "600",
+              display: "inline-block",
+            }}
+            onClick={onBack}
+          >
+            Return to Store
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="payment-page-container">

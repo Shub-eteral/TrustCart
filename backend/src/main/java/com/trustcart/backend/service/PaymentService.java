@@ -6,10 +6,12 @@ import com.trustcart.backend.dto.PaymentResponseDTO;
 import com.trustcart.backend.model.CartItem;
 import com.trustcart.backend.model.Order;
 import com.trustcart.backend.model.Payment;
+import com.trustcart.backend.model.Product;
 import com.trustcart.backend.model.User;
 import com.trustcart.backend.repository.CartItemRepository;
 import com.trustcart.backend.repository.OrderRepository;
 import com.trustcart.backend.repository.PaymentRepository;
+import com.trustcart.backend.repository.ProductRepository;
 import com.trustcart.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
     private final CartItemRepository cartItemRepository;
+    private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
     private final OrderService orderService;
 
@@ -38,11 +41,13 @@ public class PaymentService {
             PaymentRepository paymentRepository,
             UserRepository userRepository,
             CartItemRepository cartItemRepository,
+            ProductRepository productRepository,
             OrderRepository orderRepository,
             OrderService orderService) {
         this.paymentRepository = paymentRepository;
         this.userRepository = userRepository;
         this.cartItemRepository = cartItemRepository;
+        this.productRepository = productRepository;
         this.orderRepository = orderRepository;
         this.orderService = orderService;
     }
@@ -54,6 +59,20 @@ public class PaymentService {
                 .orElseThrow(() -> new RuntimeException("User not found: " + email));
 
         List<CartItem> cartItems = cartItemRepository.findByUser(user);
+
+        // Auto-sync items from request payload if database cart was cleared
+        if (cartItems.isEmpty() && request != null && request.getItems() != null && !request.getItems().isEmpty()) {
+            for (PaymentRequestDTO.ItemDTO itemDTO : request.getItems()) {
+                if (itemDTO.getProductId() != null && itemDTO.getQuantity() > 0) {
+                    Product p = productRepository.findById(itemDTO.getProductId()).orElse(null);
+                    if (p != null) {
+                        cartItemRepository.save(new CartItem(user, p, itemDTO.getQuantity()));
+                    }
+                }
+            }
+            cartItems = cartItemRepository.findByUser(user);
+        }
+
         if (cartItems.isEmpty()) {
             throw new RuntimeException("Cart is empty. Cannot initiate payment.");
         }
@@ -103,20 +122,34 @@ public class PaymentService {
     // Confirm simulated payment or process gateway response
     @Transactional
     public PaymentResponseDTO confirmPayment(String email, PaymentConfirmDTO request) {
-        if (request == null || (request.getPaymentReferenceId() == null && request.getPaymentId() == null)) {
-            throw new RuntimeException("Payment reference or ID is required");
-        }
-
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found: " + email));
 
-        Payment payment;
-        if (request.getPaymentReferenceId() != null) {
+        Payment payment = null;
+        if (request != null && request.getPaymentReferenceId() != null && !request.getPaymentReferenceId().isBlank()) {
             payment = paymentRepository.findByPaymentReferenceId(request.getPaymentReferenceId())
-                    .orElseThrow(() -> new RuntimeException("Payment not found with reference: " + request.getPaymentReferenceId()));
-        } else {
+                    .orElse(null);
+        }
+
+        if (payment == null && request != null && request.getPaymentId() != null) {
             payment = paymentRepository.findById(request.getPaymentId())
-                    .orElseThrow(() -> new RuntimeException("Payment not found with id: " + request.getPaymentId()));
+                    .orElse(null);
+        }
+
+        // Auto-create payment if not pre-initiated or not found in database
+        if (payment == null) {
+            PaymentRequestDTO initReq = new PaymentRequestDTO();
+            if (request != null) {
+                if (request.getPaymentMethod() != null) {
+                    initReq.setPaymentMethod(request.getPaymentMethod());
+                }
+                if (request.getItems() != null) {
+                    initReq.setItems(request.getItems());
+                }
+            }
+            PaymentResponseDTO initResp = createPayment(email, initReq);
+            payment = paymentRepository.findById(initResp.getPaymentId())
+                    .orElseThrow(() -> new RuntimeException("Failed to initialize payment for confirmation"));
         }
 
         if (!payment.getUser().getId().equals(user.getId())) {
@@ -130,14 +163,15 @@ public class PaymentService {
             return response;
         }
 
-        if (request.getPaymentMethod() != null && !request.getPaymentMethod().isBlank()) {
+        if (request != null && request.getPaymentMethod() != null && !request.getPaymentMethod().isBlank()) {
             payment.setPaymentMethod(request.getPaymentMethod().toUpperCase());
         }
 
         boolean isCod = "COD".equalsIgnoreCase(payment.getPaymentMethod());
+        boolean simulatedSuccess = request == null || request.isSimulatedSuccess();
 
         // Simulated payment failure check
-        if (!request.isSimulatedSuccess() && !isCod) {
+        if (!simulatedSuccess && !isCod) {
             payment.setPaymentStatus("FAILED");
             payment.setFailureReason("Transaction declined by bank or simulated failure test");
             Payment failedPayment = paymentRepository.save(payment);
@@ -146,13 +180,18 @@ public class PaymentService {
             return response;
         }
 
+        // Clear any previous failure reason on success retry
+        payment.setFailureReason(null);
+
         // Process successful payment or Cash on Delivery
         if (isCod) {
             payment.setPaymentStatus("COD");
-            payment.setTransactionDetails("Cash on Delivery chosen");
+            payment.setTransactionDetails(request != null && request.getTransactionNote() != null
+                    ? request.getTransactionNote()
+                    : "Cash on Delivery chosen");
         } else {
             payment.setPaymentStatus("SUCCESS");
-            if (request.getTransactionNote() != null) {
+            if (request != null && request.getTransactionNote() != null) {
                 payment.setTransactionDetails(request.getTransactionNote());
             }
         }
